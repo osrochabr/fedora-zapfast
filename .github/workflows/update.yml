@@ -1,0 +1,48 @@
+name: Track upstream release
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Bump zapfast.spec to the latest upstream release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo crmne/zapfast --json tagName --jq .tagName)
+          latest=${tag#v}
+          current=$(awk '$1 == "Version:" {print $2}' zapfast.spec)
+          if [ "$(printf '%s\n' "$current" "$latest" | sort -V | tail -n1)" = "$current" ]; then
+            echo "zapfast.spec is up to date ($current)"
+            exit 0
+          fi
+          # upstream attaches assets after creating the release; wait for all of them
+          assets=$(gh release view "$tag" --repo crmne/zapfast --json assets --jq '.assets[].name')
+          for f in "zapfast-$tag-x86_64-unknown-linux-gnu.tar.gz" "zapfast-$tag-aarch64-unknown-linux-gnu.tar.gz" checksums.txt checksums.txt.sig; do
+            if ! grep -qxF "$f" <<< "$assets"; then
+              echo "$f is not published yet; retrying on the next run"
+              exit 0
+            fi
+          done
+          sed -i "s/^\(Version:[[:space:]]*\).*/\1$latest/" zapfast.spec
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update to $latest"
+          git push
+
+      # GitHub pauses schedules after 60 days without repository activity
+      - name: Keep the schedule enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/update.yml/enable"

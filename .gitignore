@@ -1,0 +1,3 @@
+*.rpm
+/zapfast-*.tar.gz
+/zapfast-*-checksums.txt*
