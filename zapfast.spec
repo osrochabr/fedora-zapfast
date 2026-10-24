@@ -9,7 +9,7 @@
 %endif
 
 Name:           zapfast
-Version:        0.20.0
+Version:        0.20.1
 Release:        %autorelease
 Summary:        Fast native WhatsApp client
 License:        MIT
